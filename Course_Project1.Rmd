@@ -1,0 +1,123 @@
+---
+title: "Course Project on Practical Machine Learning"
+author: "Lee Bee Yin"
+date: "October 17, 2016"
+output: html_document
+---
+
+##**Background**
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##**Data**
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+##**Objectives**
+
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+To create a report that describing how the model is built, cross validate, and expected out of the sample file and the choices made.  
+At the end, using the prediction model to predict 20 different test cases.
+
+##**Loading Libraries and Data**
+
+```{r,echo = TRUE,warning=FALSE,error=FALSE,message=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(randomForest)
+library(corrplot)
+library("e1071")
+
+set.seed(111)
+
+#read training and test data
+#assuming data files are downloaded and saved in the same folder
+training<-read.csv("pml-training.csv", na.strings = c("NA","#DIV/0!", ""))
+testing<-read.csv("pml-testing.csv", na.strings = c("NA","#DIV/0!", ""))
+
+#Partition the training data 75% to myTraining and 25% to myTesting
+inTrain<-createDataPartition(training$classe, p=3/4, list=FALSE)
+myTraining<-training[inTrain,]
+myTesting<-training[-inTrain,]
+#dim(myTraining)
+#dim(myTesting)
+```
+
+##**Data Cleansing**
+
+```{r,echo = TRUE,warning=FALSE,error=FALSE,message=FALSE}
+myTraining <- myTraining[c(-1)] #remove the first column
+nzv <- nearZeroVar(myTraining, saveMetrics=TRUE)
+myTraining <- myTraining[,nzv$nzv==FALSE]
+
+tmptraining <- myTraining
+for(i in 1:length(myTraining)) {
+    if( sum( is.na( myTraining[, i] ) ) /nrow(myTraining) >= .7) {
+        for(j in 1:length(tmptraining)) {
+            if( length( grep(names(myTraining[i]), names(tmptraining)[j]) ) == 1)  {
+                tmptraining <- tmptraining[ , -j]
+            }   
+        } 
+    }
+}
+
+# Set back to the original variable name
+myTraining <- tmptraining
+rm(tmptraining)
+
+clean1 <- colnames(myTraining)
+clean2 <- colnames(myTraining[, -58])  # remove the classe column
+
+#do the same to myTesting data
+nzv<- nearZeroVar(myTesting,saveMetrics=TRUE)
+myTesting <- myTesting[,nzv$nzv==FALSE]
+myTesting <- myTesting[clean1]
+myTesting <- myTesting[-1,] #remove the first column
+
+testing <- testing[clean2]             
+testing <- rbind(myTraining[2, -58] , testing) 
+testing <- testing[-1,]
+```
+
+##**Model: Decision Tree**
+
+```{r,echo = TRUE,warning=FALSE,error=FALSE,message=FALSE}
+modfit1 <- rpart(classe ~ ., data=myTraining, method="class")
+predictions1 <- predict(modfit1, myTesting, type = "class")
+confusionMatrix(predictions1, myTesting$classe)
+
+```
+
+##**Model: Random Forest**
+
+```{r,echo = TRUE,warning=FALSE,error=FALSE,message=FALSE}
+modfit2 <- randomForest(classe ~. , data=myTraining)
+predictions2 <- predict(modfit2, myTesting, type = "class")
+confusionMatrix(predictions2, myTesting$classe)
+```
+
+##**Result**
+
+Random Forest gave an accuracy of 0.9996 or 99.96% compared to decision tree 0.8666 or 86.66%
+
+##**Prediction Model using Random Forest on 20 different test cases**
+
+```{r,echo = FALSE,warning=FALSE,error=FALSE,message=FALSE}
+predictionFinal <- predict(modfit2, testing, type = "class")
+predictionFinal
+pml_write_files = function(x){
+  n = length(x) 
+  for (i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE) 
+  } 
+}
+```
